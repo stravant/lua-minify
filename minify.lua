@@ -472,9 +472,11 @@ function CreateLuaParser(text)
 	local function isBinop()
 		return BinopSet[peek().Source] or false
 	end
-	local function expect(type, source)
+	local function expect(type, source, type2, source2)
 		local tk = peek()
 		if tk.Type == type and (source == nil or tk.Source == source) then
+			return get()
+		elseif tk.Type == type2 and (source2 == nil or tk.Source == source2) then
 			return get()
 		else
 			for i = -3, 3 do
@@ -483,7 +485,9 @@ function CreateLuaParser(text)
 			if source then
 				error(getTokenStartPosition(tk)..": `"..source.."` expected.")
 			else
-				error(getTokenStartPosition(tk)..": "..type.." expected.")
+				error(getTokenStartPosition(tk)..": "..type
+					  ..(type2 and (" or "..type2) or "")
+					  .." expected.")
 			end
 		end
 	end
