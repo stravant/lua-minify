@@ -1700,12 +1700,15 @@ function AddVariableInfo(ast)
 		Pre = function(expr)
 			pushScope()
 			for index, ident in pairs(expr.ArgList) do
-				local var = addLocalVar(ident.Source, function(name)
-					ident.Source = name
-				end, {
-					Type = 'Argument';
-					Index = index;
-				})
+				-- Note: Beware ident.Type == 'Symbol', it may be "..." here!
+				if ident.Type == 'Ident' then
+					local var = addLocalVar(ident.Source, function(name)
+						ident.Source = name
+					end, {
+						Type = 'Argument';
+						Index = index;
+					})
+				end
 			end
 		end;
 		Post = function(expr)
