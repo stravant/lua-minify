@@ -472,9 +472,11 @@ function CreateLuaParser(text)
 	local function isBinop()
 		return BinopSet[peek().Source] or false
 	end
-	local function expect(type, source)
+	local function expect(type, source, type2, source2)
 		local tk = peek()
 		if tk.Type == type and (source == nil or tk.Source == source) then
+			return get()
+		elseif tk.Type == type2 and (source2 == nil or tk.Source == source2) then
 			return get()
 		else
 			for i = -3, 3 do
@@ -483,7 +485,9 @@ function CreateLuaParser(text)
 			if source then
 				error(getTokenStartPosition(tk)..": `"..source.."` expected.")
 			else
-				error(getTokenStartPosition(tk)..": "..type.." expected.")
+				error(getTokenStartPosition(tk)..": "..type
+					  ..(type2 and (" or "..type2) or "")
+					  .." expected.")
 			end
 		end
 	end
@@ -619,16 +623,21 @@ function CreateLuaParser(text)
 	end
 
 	-- List of identifiers
-	local function varlist()
-		local varList = {}
-		local commaList = {}
-		if peek().Type == 'Ident' then
+	local function varlist(isFuncDecl)
+		local varList, commaList, token = {}, {}, peek()
+		if token.Type == 'Ident' then
+			table.insert(varList, get())
+		elseif isFuncDecl and (token.Source == '...') then
 			table.insert(varList, get())
 		end
 		while peek().Source == ',' do
 			table.insert(commaList, get())
-			local id = expect('Ident')
-			table.insert(varList, id)
+			if isFuncDecl then
+				token = expect('Ident', nil, 'Symbol', '...')
+			else
+				token = expect('Ident')
+			end
+			table.insert(varList, token)
 		end
 		return varList, commaList
 	end
@@ -670,7 +679,7 @@ function CreateLuaParser(text)
 		end
 		--
 		local oparenTk = expect('Symbol', '(')
-		local argList, argCommaList = varlist()
+		local argList, argCommaList = varlist(true)
 		local cparenTk = expect('Symbol', ')')
 		local fbody, enTk = blockbody('end')
 		--
@@ -1691,12 +1700,15 @@ function AddVariableInfo(ast)
 		Pre = function(expr)
 			pushScope()
 			for index, ident in pairs(expr.ArgList) do
-				local var = addLocalVar(ident.Source, function(name)
-					ident.Source = name
-				end, {
-					Type = 'Argument';
-					Index = index;
-				})
+				-- Note: Beware ident.Type == 'Symbol', it may be "..." here!
+				if ident.Type == 'Ident' then
+					local var = addLocalVar(ident.Source, function(name)
+						ident.Source = name
+					end, {
+						Type = 'Argument';
+						Index = index;
+					})
+				end
 			end
 		end;
 		Post = function(expr)
@@ -1748,12 +1760,15 @@ function AddVariableInfo(ast)
 			})
 			pushScope()
 			for index, ident in pairs(stat.FunctionStat.ArgList) do
-				addLocalVar(ident.Source, function(name)
-					ident.Source = name
-				end, {
-					Type = 'Argument';
-					Index = index;
-				})
+				-- Note: Beware ident.Type == 'Symbol', it may be "..." here!
+				if ident.Type == 'Ident' then
+					addLocalVar(ident.Source, function(name)
+						ident.Source = name
+					end, {
+						Type = 'Argument';
+						Index = index;
+					})
+				end
 			end
 		end;
 		Post = function()
@@ -1783,12 +1798,15 @@ function AddVariableInfo(ast)
 			var.AssignedTo = true
 			pushScope()
 			for index, ident in pairs(stat.ArgList) do
-				addLocalVar(ident.Source, function(name)
-					ident.Source = name
-				end, {
-					Type = 'Argument';
-					Index = index;
-				})
+				-- Note: Beware ident.Type == 'Symbol', it may be "..." here!
+				if ident.Type == 'Ident' then
+					addLocalVar(ident.Source, function(name)
+						ident.Source = name
+					end, {
+						Type = 'Argument';
+						Index = index;
+					})
+				end
 			end
 		end;
 		Post = function()
