@@ -324,11 +324,8 @@ function CreateLuaTokenStream(text)
 				local c2 = get()
 				if c2 == '\\' then
 					local c3 = get()
-					if not c3:match("%d") then
-						local esc = CharacterForEscape[c3]
-						if not esc then
-							error("Invalid Escape Sequence `"..c3.."`.")
-						end
+					if not(Digits[c3] or CharacterForEscape[c3]) then
+						error("Invalid Escape Sequence `"..c3.."`.")
 					end
 				elseif c2 == c1 then
 					break
