@@ -824,6 +824,8 @@ function CreateLuaParser(text)
 				base = callexpr(base) -- TableCall
 			elseif tk.Source == '(' then
 				base = callexpr(base) -- ArgCall
+			elseif tk.Type == 'String' then
+				base = callexpr(base) -- StringCall
 			else
 				return base
 			end
