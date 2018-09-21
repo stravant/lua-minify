@@ -392,9 +392,13 @@ function CreateLuaTokenStream(text)
 				get()
 				if look() == '.' then
 					get()
+					token('Ident')
+				else
+					token('Symbol')
 				end
+			else
+				token('Symbol')
 			end
-			token('Symbol')
 		elseif EqualSymbols[c1] then
 			if look() == '=' then
 				p = p + 1
