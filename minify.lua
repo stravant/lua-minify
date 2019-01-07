@@ -22,44 +22,83 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
-function lookupify(tb)
-	for _, v in pairs(tb) do
-		tb[v] = true
-	end
-	return tb
+local WhiteChars,
+	CharacterForEscape,
+	AllIdentChars,
+	AllIdentStartChars,
+	Digits,
+	EqualSymbols,
+	HexDigits,
+	Symbols,
+	Keywords,
+	BlockFollowKeyword,
+	UnopSet,
+	BinopSet,
+	GlobalRenameIgnore,
+	BinaryPriority,
+	UnaryPriority,
+	lookupify
+
+do -- Load in the lookup data
+	local lookData = require('lookups')
+
+	WhiteChars = lookData.WhiteChars
+	CharacterForEscape = lookData.CharacterForEscape
+	AllIdentChars = lookData.AllIdentChars
+	AllIdentStartChars = lookData.AllIdentStartChars
+	Digits = lookData.Digits
+	EqualSymbols = lookData.EqualSymbols
+	HexDigits = lookData.HexDigits
+	Symbols = lookData.Symbols
+	Keywords = lookData.Keywords
+	BlockFollowKeyword = lookData.BlockFollowKeyword
+	UnopSet = lookData.UnopSet
+	BinopSet = lookData.BinopSet
+	GlobalRenameIgnore = lookData.GlobalRenameIgnore
+	BinaryPriority = lookData.BinaryPriority
+	UnaryPriority = lookData.UnaryPriority
+	lookupify = lookData.lookupify
 end
 
-function CountTable(tb)
+local function CountTable(tb)
 	local c = 0
 	for _ in pairs(tb) do c = c + 1 end
 	return c
 end
 
-function FormatTableInt(tb, atIndent, ignoreFunc)
+local function FormatTableInt(tb, atIndent, ignoreFunc)
 	if tb.Print then
 		return tb.Print()
 	end
+
 	atIndent = atIndent or 0
+
 	local useNewlines = (CountTable(tb) > 1)
-	local baseIndent = string.rep('    ', atIndent+1)
+	local baseIndent = useNewlines and string.rep('    ', atIndent+1) or ''
 	local out = "{"..(useNewlines and '\n' or '')
+
 	for k, v in pairs(tb) do
-		if type(v) ~= 'function' and not ignoreFunc(k) then
-			out = out..(useNewlines and baseIndent or '')
-			if type(k) == 'number' then
-				--nothing to do
-			elseif type(k) == 'string' and k:match("^[A-Za-z_][A-Za-z0-9_]*$") then 
-				out = out..k.." = "
-			elseif type(k) == 'string' then
-				out = out.."[\""..k.."\"] = "
-			else
+		local ttv = type(v)
+		if ttv ~= 'function' and not ignoreFunc(k) then
+			local ttk = type(k)
+
+			out = out .. baseIndent
+
+			if ttk == 'string' then
+				if k:match("^[A-Za-z_][A-Za-z0-9_]*$") then
+					out = out..k.." = "
+				else
+					out = out.."[\""..k.."\"] = "
+				end
+			elseif ttk ~= 'number' then
 				out = out.."["..tostring(k).."] = "
 			end
-			if type(v) == 'string' then
+
+			if ttv == 'string' then
 				out = out.."\""..v.."\""
-			elseif type(v) == 'number' then
+			elseif ttv == 'number' then
 				out = out..v
-			elseif type(v) == 'table' then
+			elseif ttv == 'table' then
 				out = out..FormatTableInt(v, atIndent+(useNewlines and 1 or 0), ignoreFunc)
 			else
 				out = out..tostring(v)
@@ -76,87 +115,16 @@ function FormatTableInt(tb, atIndent, ignoreFunc)
 	return out
 end
 
-function FormatTable(tb, ignoreFunc)
-	ignoreFunc = ignoreFunc or function() 
-		return false 
+local function FormatTable(tb, ignoreFunc)
+	ignoreFunc = ignoreFunc or function()
+		return false
 	end
 	return FormatTableInt(tb, 0, ignoreFunc)
 end
 
-local WhiteChars = lookupify{' ', '\n', '\t', '\r'}
-
-local EscapeForCharacter = {['\r'] = '\\r', ['\n'] = '\\n', ['\t'] = '\\t', ['"'] = '\\"', ["'"] = "\\'", ['\\'] = '\\'}
-
-local CharacterForEscape = {['r'] = '\r', ['n'] = '\n', ['t'] = '\t', ['"'] = '"', ["'"] = "'", ['\\'] = '\\'}
-
-local AllIdentStartChars = lookupify{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 
-                                     'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 
-                                     's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-                                     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 
-                                     'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 
-                                     'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_'}
-
-local AllIdentChars = lookupify{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 
-                                'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 
-                                's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-                                'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 
-                                'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 
-                                'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_',
-                                '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
-
-local Digits = lookupify{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
-
-local HexDigits = lookupify{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 
-                            'A', 'a', 'B', 'b', 'C', 'c', 'D', 'd', 'E', 'e', 'F', 'f'}
-
-local Symbols = lookupify{'+', '-', '*', '/', '^', '%', ',', '{', '}', '[', ']', '(', ')', ';', '#', '.', ':'}
-
-local EqualSymbols = lookupify{'~', '=', '>', '<'}
-
-local Keywords = lookupify{
-    'and', 'break', 'do', 'else', 'elseif',
-    'end', 'false', 'for', 'function', 'goto', 'if',
-    'in', 'local', 'nil', 'not', 'or', 'repeat',
-    'return', 'then', 'true', 'until', 'while',
-};
-
-local BlockFollowKeyword = lookupify{'else', 'elseif', 'until', 'end'}
-
-local UnopSet = lookupify{'-', 'not', '#'}
-
-local BinopSet = lookupify{
-	'+', '-', '*', '/', '%', '^', '#',
-	'..', '.', ':',
-	'>', '<', '<=', '>=', '~=', '==',
-	'and', 'or'
-}
-
-local GlobalRenameIgnore = lookupify{
-
-}
-
-local BinaryPriority = {
-   ['+'] = {6, 6};
-   ['-'] = {6, 6};
-   ['*'] = {7, 7};
-   ['/'] = {7, 7};
-   ['%'] = {7, 7};
-   ['^'] = {10, 9};
-   ['..'] = {5, 4};
-   ['=='] = {3, 3};
-   ['~='] = {3, 3};
-   ['>'] = {3, 3};
-   ['<'] = {3, 3};
-   ['>='] = {3, 3};
-   ['<='] = {3, 3};
-   ['and'] = {2, 2};
-   ['or'] = {1, 1};
-};
-local UnaryPriority = 8
-
 -- Eof, Ident, Keyword, Number, String, Symbol
 
-function CreateLuaTokenStream(text)
+local function CreateLuaTokenStream(text)
 	-- Tracking for the current position in the buffer, and
 	-- the current line / character we are on.
 	local p = 1
@@ -409,7 +377,7 @@ function CreateLuaTokenStream(text)
 	return tokenBuffer
 end
 
-function CreateLuaParser(text)
+local function CreateLuaParser(text)
 	-- Token stream and pointer into it
 	local tokens = CreateLuaTokenStream(text)
 	-- for _, tok in pairs(tokens) do
@@ -465,7 +433,7 @@ function CreateLuaParser(text)
 	local function isBlockFollow()
 		local tok = peek()
 		return tok.Type == 'Eof' or (tok.Type == 'Keyword' and BlockFollowKeyword[tok.Source])
-	end	
+	end
 	local function isUnop()
 		return UnopSet[peek().Source] or false
 	end
@@ -555,7 +523,7 @@ function CreateLuaParser(text)
 		end
 	end
 
-	function tableexpr()
+	local function tableexpr()
 		local obrace = expect('Symbol', '{')
 		local entries = {}
 		local separators = {}
@@ -920,7 +888,7 @@ function CreateLuaParser(text)
 					return self.Rhs:GetLastToken()
 				end;
 			}
-		else 
+		else
 			curNode = simpleexpr()
 			assert(curNode, "nil simpleexpr")
 		end
@@ -1212,7 +1180,7 @@ function CreateLuaParser(text)
 				Token_Local = localKw;
 				Token_Equals = eqToken;
 				Token_VarCommaList = varCommaList;
-				Token_ExprCommaList = exprCommaList;	
+				Token_ExprCommaList = exprCommaList;
 				GetFirstToken = function(self)
 					return self.Token_Local
 				end;
@@ -1341,9 +1309,9 @@ function CreateLuaParser(text)
 	return block()
 end
 
-function VisitAst(ast, visitors)
+local function VisitAst(ast, visitors)
 	local ExprType = lookupify{
-		'BinopExpr'; 'UnopExpr'; 
+		'BinopExpr'; 'UnopExpr';
 		'NumberLiteral'; 'StringLiteral'; 'NilLiteral'; 'BooleanLiteral'; 'VargLiteral';
 		'FieldExpr'; 'IndexExpr';
 		'MethodExpr'; 'CallExpr';
@@ -1405,9 +1373,9 @@ function VisitAst(ast, visitors)
 			visitExpr(expr.Rhs)
 		elseif expr.Type == 'UnopExpr' then
 			visitExpr(expr.Rhs)
-		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or 
-			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or 
-			expr.Type == 'VargLiteral' 
+		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or
+			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or
+			expr.Type == 'VargLiteral'
 		then
 			-- No children to visit, single token literals
 		elseif expr.Type == 'FieldExpr' then
@@ -1512,7 +1480,7 @@ function VisitAst(ast, visitors)
 			end
 		else
 			assert(false, "unreachable")
-		end	
+		end
 		postVisit(stat)
 	end
 
@@ -1523,7 +1491,7 @@ function VisitAst(ast, visitors)
 	end
 end
 
-function AddVariableInfo(ast)
+local function AddVariableInfo(ast)
 	local globalVars = {}
 	local currentScope = nil
 
@@ -1665,7 +1633,7 @@ function AddVariableInfo(ast)
 			end
 		end
 
-		-- Then 
+		-- Then
 		return nil
 	end
 	local function referenceVariable(name, setNameFunc)
@@ -1733,7 +1701,7 @@ function AddVariableInfo(ast)
 				end, {
 					Type = 'Local';
 				})
-			end		
+			end
 		end;
 	}
 	visitor.LocalFunctionStat = {
@@ -1761,11 +1729,11 @@ function AddVariableInfo(ast)
 		end;
 	}
 	visitor.FunctionStat = {
-		Pre = function(stat) 			
+		Pre = function(stat)
 			-- Function stat adds a new scope containing the function arguments
 			-- as local variables.
 			-- A function stat may also assign to a global variable if it is in
-			-- the form `function foo()` with no additional dots/colons in the 
+			-- the form `function foo()` with no additional dots/colons in the
 			-- name chain.
 			local nameChain = stat.NameChain
 			local var;
@@ -1859,7 +1827,7 @@ function AddVariableInfo(ast)
 end
 
 -- Prints out an AST to a string
-function PrintAst(ast)
+local function PrintAst(ast)
 
 	local printStat, printExpr;
 
@@ -1879,9 +1847,9 @@ function PrintAst(ast)
 		elseif expr.Type == 'UnopExpr' then
 			printt(expr.Token_Op)
 			printExpr(expr.Rhs)
-		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or 
-			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or 
-			expr.Type == 'VargLiteral' 
+		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or
+			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or
+			expr.Type == 'VargLiteral'
 		then
 			-- Just print the token
 			printt(expr.Token)
@@ -2079,7 +2047,7 @@ function PrintAst(ast)
 			end
 			printt(stat.Token_Do)
 			printStat(stat.Body)
-			printt(stat.Token_End)		
+			printt(stat.Token_End)
 		elseif stat.Type == 'WhileStat' then
 			printt(stat.Token_While)
 			printExpr(stat.Condition)
@@ -2124,7 +2092,7 @@ function PrintAst(ast)
 			end
 		else
 			assert(false, "unreachable")
-		end	
+		end
 	end
 
 	printStat(ast)
@@ -2193,9 +2161,9 @@ local function FormatAst(ast)
 		elseif expr.Type == 'UnopExpr' then
 			formatExpr(expr.Rhs)
 			--(expr.Token_Op)
-		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or 
-			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or 
-			expr.Type == 'VargLiteral' 
+		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or
+			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or
+			expr.Type == 'VargLiteral'
 		then
 			-- Nothing to do
 			--(expr.Token)
@@ -2414,7 +2382,7 @@ local function FormatAst(ast)
 				end
 			end
 			padToken(stat.Token_Do)
-			formatBody(stat.Token_Do, stat.Body, stat.Token_End)	
+			formatBody(stat.Token_Do, stat.Body, stat.Token_End)
 		elseif stat.Type == 'WhileStat' then
 			--(stat.Token_While)
 			formatExpr(stat.Condition)
@@ -2472,7 +2440,7 @@ local function FormatAst(ast)
 			end
 		else
 			assert(false, "unreachable")
-		end	
+		end
 	end
 
 	formatStat(ast)
@@ -2502,7 +2470,7 @@ local function StripAst(ast)
 		--  Abiguous syntax: `f(x)\n(x)()` is already disallowed, we can't cause a problem by removing newlines
 
 		-- Figure out what separation is needed
-		if 
+		if
 			(lastCh == '-' and firstCh == '-') or
 			(AllIdentChars[lastCh] and AllIdentChars[firstCh])
 		then
@@ -2542,9 +2510,9 @@ local function StripAst(ast)
 			stripExpr(expr.Rhs)
 			-- Handle the `- -b` -/-> `--b` case which would otherwise incorrectly generate a comment
 			joint(expr.Token_Op, expr.Rhs:GetFirstToken())
-		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or 
-			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or 
-			expr.Type == 'VargLiteral' 
+		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or
+			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or
+			expr.Type == 'VargLiteral'
 		then
 			-- Just print the token
 			stript(expr.Token)
@@ -2641,7 +2609,7 @@ local function StripAst(ast)
 					-- See if we can remove a semi-colon, the only case where we can't is if
 					-- this and the last statement have a `);(` pair, where removing the semi-colon
 					-- would introduce ambiguous syntax.
-					if stat.SemicolonList[i-1] and 
+					if stat.SemicolonList[i-1] and
 						(lastChStat:GetLastToken().Source ~= ')' or chStat:GetFirstToken().Source ~= ')')
 					then
 						stat.SemicolonList[i-1] = nil
@@ -2793,7 +2761,7 @@ local function StripAst(ast)
 				end
 			end
 			joint(stat.RangeList[#stat.RangeList]:GetLastToken(), stat.Token_Do)
-			bodyjoint(stat.Token_Do, stat.Body, stat.Token_End)	
+			bodyjoint(stat.Token_Do, stat.Body, stat.Token_End)
 		elseif stat.Type == 'WhileStat' then
 			stript(stat.Token_While)
 			stripExpr(stat.Condition)
@@ -2850,7 +2818,7 @@ local function StripAst(ast)
 			end
 		else
 			assert(false, "unreachable")
-		end	
+		end
 	end
 
 	stripStat(ast)
@@ -2891,8 +2859,8 @@ local function genVarName()
 end
 local function MinifyVariables(globalScope, rootScope)
 	-- externalGlobals is a set of global variables that have not been assigned to, that is
-	-- global variables defined "externally to the script". We are not going to be renaming 
-	-- those, and we have to make sure that we don't collide with them when renaming 
+	-- global variables defined "externally to the script". We are not going to be renaming
+	-- those, and we have to make sure that we don't collide with them when renaming
 	-- things so we keep track of them in this set.
 	local externalGlobals = {}
 
@@ -2956,7 +2924,7 @@ end
 local function MinifyVariables_2(globalScope, rootScope)
 	-- Variable names and other names that are fixed, that we cannot use
 	-- Either these are Lua keywords, or globals that are not assigned to,
-	-- that is environmental globals that are assigned elsewhere beyond our 
+	-- that is environmental globals that are assigned elsewhere beyond our
 	-- control.
 	local globalUsedNames = {}
 	for kw, _ in pairs(Keywords) do
@@ -2971,7 +2939,7 @@ local function MinifyVariables_2(globalScope, rootScope)
 		for _, var in pairs(globalScope) do
 			if var.AssignedTo then
 				-- We can try to rename this global since it was assigned to
-				-- (and thus presumably initialized) in the script we are 
+				-- (and thus presumably initialized) in the script we are
 				-- minifying.
 				table.insert(allVariables, var)
 			else
@@ -3008,7 +2976,7 @@ local function MinifyVariables_2(globalScope, rootScope)
 	local nextValidNameIndex = 0
 	local varNamesLazy = {}
 	local function varIndexToValidVarName(i)
-		local name = varNamesLazy[i] 
+		local name = varNamesLazy[i]
 		if not name then
 			repeat
 				name = indexToVarName(nextValidNameIndex)
@@ -3021,7 +2989,7 @@ local function MinifyVariables_2(globalScope, rootScope)
 
 	-- For each variable, go to rename it
 	for _, var in pairs(allVariables) do
-		-- Lazy... todo: Make theis pair a proper for-each-pair-like set of loops 
+		-- Lazy... todo: Make theis pair a proper for-each-pair-like set of loops
 		-- rather than using a renamed flag.
 		var.Renamed = true
 
@@ -3108,7 +3076,7 @@ local function MinifyVariables_2(globalScope, rootScope)
 	end
 
 
-	-- -- 
+	-- --
 	-- print("Total Variables: "..#allVariables)
 	-- print("Total Range: "..rootScope.BeginLocation.."-"..rootScope.EndLocation)
 	-- print("")
