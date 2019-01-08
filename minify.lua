@@ -593,13 +593,19 @@ local function CreateLuaParser(text)
 	local function varlist()
 		local varList = {}
 		local commaList = {}
-		if peek().Type == 'Ident' then
-			table.insert(varList, get())
-		end
-		while peek().Source == ',' do
-			table.insert(commaList, get())
-			local id = expect('Ident')
-			table.insert(varList, id)
+		while true do
+			local varg = peek().Source == '...' and get()
+			local ident = varg or expect('Ident')
+
+			if varg or ident then
+				table.insert(varList, ident)
+			end
+
+			if not varg and peek().Source == ',' then
+				table.insert(commaList, get())
+			else
+				break
+			end
 		end
 		return varList, commaList
 	end
@@ -1633,6 +1639,7 @@ local function AddVariableInfo(ast)
 		-- Then
 		return nil
 	end
+
 	local function referenceVariable(name, setNameFunc)
 		assert(name, "Missing var name")
 		local var = getLocalVar(currentScope, name)
@@ -1649,13 +1656,9 @@ local function AddVariableInfo(ast)
 		return var
 	end
 
-	local visitor = {}
-	visitor.FunctionLiteral = {
-		-- Function literal adds a new scope and adds the function literal arguments
-		-- as local variables in the scope.
-		Pre = function(expr)
-			pushScope()
-			for index, ident in pairs(expr.ArgList) do
+	local function renameFuncParams(params)
+		for index, ident in pairs(params) do
+			if ident.Source ~= '...' then
 				addLocalVar(ident.Source, function(name)
 					ident.Source = name
 				end, {
@@ -1663,6 +1666,16 @@ local function AddVariableInfo(ast)
 					Index = index;
 				})
 			end
+		end
+	end
+
+	local visitor = {}
+	visitor.FunctionLiteral = {
+		-- Function literal adds a new scope and adds the function literal arguments
+		-- as local variables in the scope.
+		Pre = function(expr)
+			pushScope()
+			renameFuncParams(expr.ArgList)
 		end;
 		Post = function(_) -- expr
 			popScope()
@@ -1712,14 +1725,7 @@ local function AddVariableInfo(ast)
 				Type = 'LocalFunction';
 			})
 			pushScope()
-			for index, ident in pairs(stat.FunctionStat.ArgList) do
-				addLocalVar(ident.Source, function(name)
-					ident.Source = name
-				end, {
-					Type = 'Argument';
-					Index = index;
-				})
-			end
+			renameFuncParams(stat.FunctionStat.ArgList)
 		end;
 		Post = function()
 			popScope()
@@ -1747,14 +1753,7 @@ local function AddVariableInfo(ast)
 			end
 			var.AssignedTo = true
 			pushScope()
-			for index, ident in pairs(stat.ArgList) do
-				addLocalVar(ident.Source, function(name)
-					ident.Source = name
-				end, {
-					Type = 'Argument';
-					Index = index;
-				})
-			end
+			renameFuncParams(stat.ArgList)
 		end;
 		Post = function()
 			popScope()
