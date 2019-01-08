@@ -36,9 +36,9 @@ end
 
 -- Define the data tables
 data.WhiteChars = lookupify {' ', '\n', '\t', '\r'}
-
--- data.EscapeForCharacter = {['\r'] = '\\r', ['\n'] = '\\n', ['\t'] = '\\t', ['"'] = '\\"', ["'"] = "\\'", ['\\'] = '\\'}
-
+--[[
+data.EscapeForCharacter = {['\r'] = '\\r', ['\n'] = '\\n', ['\t'] = '\\t', ['"'] = '\\"', ["'"] = "\\'", ['\\'] = '\\'}
+]]
 data.CharacterForEscape = {['r'] = '\r', ['n'] = '\n', ['t'] = '\t', ['"'] = '"', ["'"] = "'", ['\\'] = '\\'}
 
 data.AllIdentChars = lookupify(merge(range('a', 'z'), range('A', 'Z'), range('0', '9'), {'_'}))

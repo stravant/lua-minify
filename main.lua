@@ -289,8 +289,14 @@ local function BeautifyVariables(globalScope, rootScope)
 
 	for _, var in pairs(globalScope) do
 		if var.AssignedTo then
-			setVarName(var, 'G_' .. globalNumber)
-			globalNumber = globalNumber + 1
+			local name
+
+			repeat
+				name = 'G_' .. globalNumber .. '_'
+				globalNumber = globalNumber + 1
+			until not externalGlobals[name]
+
+			setVarName(var, name)
 		end
 	end
 
