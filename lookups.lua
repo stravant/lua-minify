@@ -105,7 +105,7 @@ data.BinopSet =
 	'or'
 }
 
-data.GlobalRenameIgnore = lookupify {}
+data.GlobalRenameIgnore = {}
 
 data.BinaryPriority = {
 	['+'] = {6, 6},
@@ -128,5 +128,9 @@ data.BinaryPriority = {
 data.UnaryPriority = 8
 
 data.lookupify = lookupify
+
+data.range = range
+
+data.merge = merge
 
 return data
