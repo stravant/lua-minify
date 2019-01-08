@@ -390,6 +390,7 @@ local function CreateLuaParser(text)
 		end
 		return tok
 	end
+
 	local function peek(n)
 		n = p + (n or 0)
 		return tokens[n] or tokens[#tokens]
@@ -423,6 +424,7 @@ local function CreateLuaParser(text)
 		end
 		return line..":"..(char+1)
 	end
+
 	local function debugMark()
 		local tk = peek()
 		return "<"..tk.Type.." `"..tk.Source.."`> at: "..getTokenStartPosition(tk)
@@ -432,12 +434,15 @@ local function CreateLuaParser(text)
 		local tok = peek()
 		return tok.Type == 'Eof' or (tok.Type == 'Keyword' and BlockFollowKeyword[tok.Source])
 	end
+
 	local function isUnop()
 		return UnopSet[peek().Source] or false
 	end
+
 	local function isBinop()
 		return BinopSet[peek().Source] or false
 	end
+
 	local function expect(type, source)
 		local tk = peek()
 		if tk.Type == type and (source == nil or tk.Source == source) then
@@ -718,6 +723,20 @@ local function CreateLuaParser(text)
 		end
 	end
 
+	local function primarycall(base)
+		return MkNode{
+			Type = 'CallExpr';
+			Base = base;
+			FunctionArguments = functionargs();
+			GetFirstToken = function(self)
+				return self.Base:GetFirstToken()
+			end;
+			GetLastToken = function(self)
+				return self.FunctionArguments:GetLastToken()
+			end;
+		}
+	end
+
 	local function primaryexpr()
 		local base = prefixexpr()
 		assert(base, "nil prefixexpr")
@@ -772,30 +791,8 @@ local function CreateLuaParser(text)
 						return self.Token_CloseBracket
 					end;
 				}
-			elseif tk.Source == '{' then
-				base = MkNode{
-					Type = 'CallExpr';
-					Base = base;
-					FunctionArguments = functionargs();
-					GetFirstToken = function(self)
-						return self.Base:GetFirstToken()
-					end;
-					GetLastToken = function(self)
-						return self.FunctionArguments:GetLastToken()
-					end;
-				}
-			elseif tk.Source == '(' then
-				base = MkNode{
-					Type = 'CallExpr';
-					Base = base;
-					FunctionArguments = functionargs();
-					GetFirstToken = function(self)
-						return self.Base:GetFirstToken()
-					end;
-					GetLastToken = function(self)
-						return self.FunctionArguments:GetLastToken()
-					end;
-				}
+			elseif tk.Source == '{' or tk.Source == '(' or tk.Type == 'String' then
+				base = primarycall(base)
 			else
 				return base
 			end
