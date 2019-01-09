@@ -290,9 +290,24 @@ local function CreateLuaTokenStream(text)
 				local c2 = get()
 				if c2 == '\\' then
 					local c3 = get()
-					local esc = CharacterForEscape[c3]
-					if not esc then
-						error("Invalid Escape Sequence `"..c3.."`.")
+					if tonumber(c3) then -- Reru fix
+						for _ = 1, 2 do
+							c3 = c3 .. look()
+
+							if tonumber(c3) then
+								get()
+								if tonumber(c3) > 255 then
+									error("Non representable character escape `" .. c3 .. "`.")
+								end
+							else
+								break
+							end
+						end
+					else
+						local esc = CharacterForEscape[c3]
+						if not esc then
+							error("Invalid Escape Sequence `"..c3.."`.")
+						end
 					end
 				elseif c2 == c1 then
 					break
@@ -593,7 +608,7 @@ local function CreateLuaParser(text)
 	local function varlist()
 		local varList = {}
 		local commaList = {}
-		while true do
+		while peek().Source ~= ')' do
 			local varg = peek().Source == '...' and get()
 			local ident = varg or expect('Ident')
 
