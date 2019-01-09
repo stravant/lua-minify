@@ -320,49 +320,95 @@ local function BeautifyVariables(globalScope, rootScope)
 	modify(rootScope)
 end
 
-local function usageError()
-	error(
-		'\nusage: minify <file> or unminify <file>\n' ..
-		'  The modified code will be printed to the stdout, pipe it to a file, the\n' ..
-		'  lua interpreter, or something else as desired EG:\n\n' ..
-		'        lua minify.lua minify input.lua > output.lua\n\n' ..
-		'  * minify will minify the code in the file.\n' ..
-		'  * unminify will beautify the code and replace the variable names with easily\n' ..
-		'    find-replacable ones to aide in reverse engineering minified code.\n',
-		0
-	)
+local source
+local files = {}
+local flags = {}
+local usage_err
+
+do -- prepare program
+	local usage = {}
+	local info = {
+		{'help', 'Show the help message and exit'},
+		{'minify', 'Trim extra whitespace'},
+		{'beautify', 'Format the code'},
+		{'small', 'Minify the variable names'},
+		{'smaller', 'Minify the variable names based on scoping'},
+		{'pretty', 'Beautify the variable names'}
+	}
+
+	for _, flag in ipairs(info) do
+		local name = flag[1]
+
+		flags[name] = false
+		table.insert(usage, string.format('\t--%-10s@ %s', name, flag[2]))
+	end
+
+	function usage_err(err)
+		error(err .. '\nusage: [options] inputs > output\n' .. table.concat(usage, '\n'), 0)
+	end
 end
 
-local args = {...}
-if #args ~= 2 then
-	usageError()
+do -- process command line arguments
+	local args = {...}
+
+	local function readFlag(str)
+		if flags[str] == nil then
+			usage_err('unrecognized option `' .. str .. '`')
+		else
+			flags[str] = true
+		end
+	end
+
+	for _, arg in ipairs(args) do
+		if arg:sub(1, 2) == '--' then
+			readFlag(arg:sub(3))
+		else
+			table.insert(files, arg)
+		end
+	end
+
+	if flags.help then
+		usage_err('showing help')
+	elseif #files == 0 then
+		usage_err('no input files provided')
+	end
 end
 
-local sourceFile = io.open(args[2], 'r')
-if not sourceFile then
-	error('Could not open the input file `' .. args[2] .. '`', 0)
+do -- read files
+	local sources = {}
+
+	for _, name in ipairs(files) do
+		local handle, err = io.open(name, 'rb')
+
+		if not handle then
+			usage_err(err)
+		else
+			table.insert(sources, handle:read('*all'))
+		end
+
+		handle:close()
+	end
+
+	source = table.concat(sources, '\n')
 end
 
-local data = sourceFile:read('*all')
-local ast = CreateLuaParser(data)
-local global_scope, root_scope = AddVariableInfo(ast)
+do -- run program
+	local ast = CreateLuaParser(source)
+	local global_scope, root_scope = AddVariableInfo(ast)
 
-local function minify()
-	MinifyVariables_2(global_scope, root_scope)
-	StripAst(ast)
+	if flags.small then
+		MinifyVariables(global_scope, root_scope)
+	elseif flags.smaller then
+		MinifyVariables_2(global_scope, root_scope)
+	elseif flags.pretty then
+		BeautifyVariables(global_scope, root_scope)
+	end
+
+	if flags.minify then
+		StripAst(ast)
+	elseif flags.beautify then
+		FormatAst(ast)
+	end
+
 	PrintAst(ast)
-end
-
-local function beautify()
-	BeautifyVariables(global_scope, root_scope)
-	FormatAst(ast)
-	PrintAst(ast)
-end
-
-if args[1] == 'minify' then
-	minify(ast, global_scope, root_scope)
-elseif args[1] == 'unminify' then
-	beautify(ast, global_scope, root_scope)
-else
-	usageError()
 end
