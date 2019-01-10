@@ -473,12 +473,6 @@ local function CreateLuaParser(text)
 
 	local function MkNode(node) -- overloads and "virtualizes" the methods
 		local methods = methodList[node.Type or node.CallType]
-		if not methods or not methods.GetFirstToken then
-			print('ERRORING')
-			for i, v in pairs(node) do
-				print(i, v)
-			end
-		end
 		node.VirtualGetFirstToken = methods.GetFirstToken
 		node.VirtualGetLastToken = methods.GetLastToken
 		node.GetFirstToken = methodList.node.GetFirstToken
