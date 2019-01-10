@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
+local methodList = require('methods')
 local WhiteChars,
 	CharacterForEscape,
 	AllIdentChars,
@@ -470,19 +471,18 @@ local function CreateLuaParser(text)
 		end
 	end
 
-	local function MkNode(node)
-		local getf = node.GetFirstToken
-		local getl = node.GetLastToken
-		function node:GetFirstToken()
-			local t = getf(self)
-			assert(t)
-			return t
+	local function MkNode(node) -- overloads and "virtualizes" the methods
+		local methods = methodList[node.Type or node.CallType]
+		if not methods or not methods.GetFirstToken then
+			print('ERRORING')
+			for i, v in pairs(node) do
+				print(i, v)
+			end
 		end
-		function node:GetLastToken()
-			local t = getl(self)
-			assert(t)
-			return t
-		end
+		node.VirtualGetFirstToken = methods.GetFirstToken
+		node.VirtualGetLastToken = methods.GetLastToken
+		node.GetFirstToken = methodList.node.GetFirstToken
+		node.GetLastToken = methodList.node.GetLastToken
 		return node
 	end
 
@@ -513,23 +513,11 @@ local function CreateLuaParser(text)
 				Expression = inner;
 				Token_OpenParen = oparenTk;
 				Token_CloseParen = cparenTk;
-				GetFirstToken = function(self)
-					return self.Token_OpenParen
-				end;
-				GetLastToken = function(self)
-					return self.Token_CloseParen
-				end;
 			}
 		elseif tk.Type == 'Ident' then
 			return MkNode{
 				Type = 'VariableExpr';
 				Token = get();
-				GetFirstToken = function(self)
-					return self.Token
-				end;
-				GetLastToken = function(self)
-					return self.Token
-				end;
 			}
 		else
 			print(debugMark())
@@ -591,12 +579,6 @@ local function CreateLuaParser(text)
 			Token_SeparatorList = separators;
 			Token_OpenBrace = obrace;
 			Token_CloseBrace = cbrace;
-			GetFirstToken = function(self)
-				return self.Token_OpenBrace
-			end;
-			GetLastToken = function(self)
-				return self.Token_CloseBrace
-			end;
 		}
 	end
 
@@ -674,12 +656,6 @@ local function CreateLuaParser(text)
 			Token_ArgCommaList = argCommaList;
 			Token_CloseParen = cparenTk;
 			Token_End = enTk;
-			GetFirstToken = function(self)
-				return self.Token_Function
-			end;
-			GetLastToken = function(self)
-				return self.Token_End;
-			end;
 		}
 	end
 
@@ -706,34 +682,16 @@ local function CreateLuaParser(text)
 				Token_CommaList = argCommaList;
 				Token_OpenParen = oparenTk;
 				Token_CloseParen = cparenTk;
-				GetFirstToken = function(self)
-					return self.Token_OpenParen
-				end;
-				GetLastToken = function(self)
-					return self.Token_CloseParen
-				end;
 			}
 		elseif tk.Source == '{' then
 			return MkNode{
 				CallType = 'TableCall';
 				TableExpr = expr();
-				GetFirstToken = function(self)
-					return self.TableExpr:GetFirstToken()
-				end;
-				GetLastToken = function(self)
-					return self.TableExpr:GetLastToken()
-				end;
 			}
 		elseif tk.Type == 'String' then
 			return MkNode{
 				CallType = 'StringCall';
 				Token = get();
-				GetFirstToken = function(self)
-					return self.Token
-				end;
-				GetLastToken = function(self)
-					return self.Token
-				end;
 			}
 		else
 			error("Function arguments expected.")
@@ -745,12 +703,6 @@ local function CreateLuaParser(text)
 			Type = 'CallExpr';
 			Base = base;
 			FunctionArguments = functionargs();
-			GetFirstToken = function(self)
-				return self.Base:GetFirstToken()
-			end;
-			GetLastToken = function(self)
-				return self.FunctionArguments:GetLastToken()
-			end;
 		}
 	end
 
@@ -767,12 +719,6 @@ local function CreateLuaParser(text)
 					Base = base;
 					Field = fieldName;
 					Token_Dot = dotTk;
-					GetFirstToken = function(self)
-						return self.Base:GetFirstToken()
-					end;
-					GetLastToken = function(self)
-						return self.Field
-					end;
 				}
 			elseif tk.Source == ':' then
 				local colonTk = get()
@@ -784,12 +730,6 @@ local function CreateLuaParser(text)
 					Method = methodName;
 					FunctionArguments = fargs;
 					Token_Colon = colonTk;
-					GetFirstToken = function(self)
-						return self.Base:GetFirstToken()
-					end;
-					GetLastToken = function(self)
-						return self.FunctionArguments:GetLastToken()
-					end;
 				}
 			elseif tk.Source == '[' then
 				local obrac = get()
@@ -801,12 +741,6 @@ local function CreateLuaParser(text)
 					Index = index;
 					Token_OpenBracket = obrac;
 					Token_CloseBracket = cbrac;
-					GetFirstToken = function(self)
-						return self.Base:GetFirstToken()
-					end;
-					GetLastToken = function(self)
-						return self.Token_CloseBracket
-					end;
 				}
 			elseif tk.Source == '{' or tk.Source == '(' or tk.Type == 'String' then
 				base = primarycall(base)
@@ -820,12 +754,6 @@ local function CreateLuaParser(text)
 		return MkNode{
 			Type = tt;
 			Token = get();
-			GetFirstToken = function(self)
-				return self.Token
-			end;
-			GetLastToken = function(self)
-				return self.Token
-			end;
 		}
 	end
 
@@ -861,12 +789,6 @@ local function CreateLuaParser(text)
 				Type = 'UnopExpr';
 				Token_Op = opTk;
 				Rhs = ex;
-				GetFirstToken = function(self)
-					return self.Token_Op
-				end;
-				GetLastToken = function(self)
-					return self.Rhs:GetLastToken()
-				end;
 			}
 		else
 			curNode = simpleexpr()
@@ -883,12 +805,6 @@ local function CreateLuaParser(text)
 				Lhs = curNode;
 				Rhs = rhs;
 				Token_Op = opTk;
-				GetFirstToken = function(self)
-					return self.Lhs:GetFirstToken()
-				end;
-				GetLastToken = function(self)
-					return self.Rhs:GetLastToken()
-				end;
 			}
 		end
 
@@ -909,12 +825,6 @@ local function CreateLuaParser(text)
 			return MkNode{
 				Type = 'CallExprStat';
 				Expression = ex;
-				GetFirstToken = function(self)
-					return self.Expression:GetFirstToken()
-				end;
-				GetLastToken = function(self)
-					return self.Expression:GetLastToken()
-				end;
 			}
 		else
 			-- Assignment expr
@@ -942,12 +852,6 @@ local function CreateLuaParser(text)
 				Token_Equals = eq;
 				Token_LhsSeparatorList = lhsSeparator;
 				Token_RhsSeparatorList = rhsSeparator;
-				GetFirstToken = function(self)
-					return self.Lhs[1]:GetFirstToken()
-				end;
-				GetLastToken = function(self)
-					return self.Rhs[#self.Rhs]:GetLastToken()
-				end;
 			}
 		end
 	end
@@ -989,12 +893,6 @@ local function CreateLuaParser(text)
 			Token_If = ifKw;
 			Token_Then = thenKw;
 			Token_End = enKw;
-			GetFirstToken = function(self)
-				return self.Token_If
-			end;
-			GetLastToken = function(self)
-				return self.Token_End
-			end;
 		}
 	end
 
@@ -1009,12 +907,6 @@ local function CreateLuaParser(text)
 			--
 			Token_Do = doKw;
 			Token_End = enKw;
-			GetFirstToken = function(self)
-				return self.Token_Do
-			end;
-			GetLastToken = function(self)
-				return self.Token_End
-			end;
 		}
 	end
 
@@ -1033,12 +925,6 @@ local function CreateLuaParser(text)
 			Token_While = whileKw;
 			Token_Do = doKw;
 			Token_End = enKw;
-			GetFirstToken = function(self)
-				return self.Token_While
-			end;
-			GetLastToken = function(self)
-				return self.Token_End
-			end;
 		}
 	end
 
@@ -1067,12 +953,6 @@ local function CreateLuaParser(text)
 				Token_RangeCommaList = exprCommaList;
 				Token_Do = doTk;
 				Token_End = enTk;
-				GetFirstToken = function(self)
-					return self.Token_For
-				end;
-				GetLastToken = function(self)
-					return self.Token_End
-				end;
 			}
 		elseif peek().Source == 'in' then
 			local inTk = get()
@@ -1091,12 +971,6 @@ local function CreateLuaParser(text)
 				Token_GeneratorCommaList = exprCommaList;
 				Token_Do = doTk;
 				Token_End = enTk;
-				GetFirstToken = function(self)
-					return self.Token_For
-				end;
-				GetLastToken = function(self)
-					return self.Token_End
-				end;
 			}
 		else
 			error("`=` or in expected")
@@ -1115,12 +989,6 @@ local function CreateLuaParser(text)
 			--
 			Token_Repeat = repeatKw;
 			Token_Until = untilTk;
-			GetFirstToken = function(self)
-				return self.Token_Repeat
-			end;
-			GetLastToken = function(self)
-				return self.Condition:GetLastToken()
-			end;
 		}
 	end
 
@@ -1137,12 +1005,6 @@ local function CreateLuaParser(text)
 				Type = 'LocalFunctionStat';
 				FunctionStat = funcStat;
 				Token_Local = localKw;
-				GetFirstToken = function(self)
-					return self.Token_Local
-				end;
-				GetLastToken = function(self)
-					return self.FunctionStat:GetLastToken()
-				end;
 			}
 		elseif peek().Type == 'Ident' then
 			-- Local variable declaration
@@ -1161,16 +1023,6 @@ local function CreateLuaParser(text)
 				Token_Equals = eqToken;
 				Token_VarCommaList = varCommaList;
 				Token_ExprCommaList = exprCommaList;
-				GetFirstToken = function(self)
-					return self.Token_Local
-				end;
-				GetLastToken = function(self)
-					if #self.ExprList > 0 then
-						return self.ExprList[#self.ExprList]:GetLastToken()
-					else
-						return self.VarList[#self.VarList]
-					end
-				end;
 			}
 		else
 			error("`function` or ident expected")
@@ -1193,16 +1045,8 @@ local function CreateLuaParser(text)
 			ExprList = exprList;
 			Token_Return = returnKw;
 			Token_CommaList = commaList;
-			GetFirstToken = function(self)
-				return self.Token_Return
-			end;
-			GetLastToken = function(self)
-				if #self.ExprList > 0 then
-					return self.ExprList[#self.ExprList]:GetLastToken()
-				else
-					return self.Token_Return
-				end
-			end;
+			GetFirstToken = methodList.ReturnStat.GetFirstToken;
+			GetLastToken = methodList.ReturnStat.GetLastToken;
 		}
 	end
 
@@ -1212,12 +1056,8 @@ local function CreateLuaParser(text)
 		return {
 			Type = 'BreakStat';
 			Token_Break = breakKw;
-			GetFirstToken = function(self)
-				return self.Token_Break
-			end;
-			GetLastToken = function(self)
-				return self.Token_Break
-			end;
+			GetFirstToken = methodList.BreakStat.GetFirstToken;
+			GetLastToken = methodList.BreakStat.GetLastToken;
 		}
 	end
 
@@ -1266,23 +1106,8 @@ local function CreateLuaParser(text)
 			Type = 'StatList';
 			StatementList = statements;
 			SemicolonList = semicolons;
-			GetFirstToken = function(self)
-				if #self.StatementList == 0 then
-					return nil
-				else
-					return self.StatementList[1]:GetFirstToken()
-				end
-			end;
-			GetLastToken = function(self)
-				if #self.StatementList == 0 then
-					return nil
-				elseif self.SemicolonList[#self.StatementList] then
-					-- Last token may be one of the semicolon separators
-					return self.SemicolonList[#self.StatementList]
-				else
-					return self.StatementList[#self.StatementList]:GetLastToken()
-				end
-			end;
+			GetFirstToken = methodList.StatList.GetFirstToken;
+			GetLastToken = methodList.StatList.GetLastToken;
 		}
 	end
 
@@ -1484,6 +1309,23 @@ local function AddVariableInfo(ast)
 		return locationGenerator
 	end
 
+	local function ScopeGetVar(self, varName)
+		for _, var in pairs(self.VariableList) do
+			if var.Name == varName then
+				return var
+			end
+		end
+		if self.ParentScope then
+			return self.ParentScope:GetVar(varName)
+		else
+			for _, var in pairs(globalVars) do
+				if var.Name == varName then
+					return var
+				end
+			end
+		end
+	end
+
 	-- Scope management
 	local function pushScope()
 		currentScope = {
@@ -1498,23 +1340,10 @@ local function AddVariableInfo(ast)
 		else
 			currentScope.Depth = 1
 		end
-		function currentScope:GetVar(varName)
-			for _, var in pairs(self.VariableList) do
-				if var.Name == varName then
-					return var
-				end
-			end
-			if self.ParentScope then
-				return self.ParentScope:GetVar(varName)
-			else
-				for _, var in pairs(globalVars) do
-					if var.Name == varName then
-						return var
-					end
-				end
-			end
-		end
+
+		currentScope.GetVar = ScopeGetVar
 	end
+
 	local function popScope()
 		local scope = currentScope
 
@@ -1549,15 +1378,9 @@ local function AddVariableInfo(ast)
 			EndLocation = markLocation();
 			ReferenceLocationList = {markLocation()};
 		}
-		function var:Rename(newName)
-			self.Name = newName
-			for _, renameFunc in pairs(self.RenameList) do
-				renameFunc(newName)
-			end
-		end
-		function var:Reference()
-			self.UseCount = self.UseCount + 1
-		end
+
+		var.Rename = methodList.Scoping.Rename
+		var.Reference = methodList.Scoping.Reference
 		table.insert(currentScope.VariableList, var)
 		return var
 	end
@@ -1578,15 +1401,9 @@ local function AddVariableInfo(ast)
 			EndLocation = markLocation();
 			ReferenceLocationList = {};
 		}
-		function var:Rename(newName)
-			self.Name = newName
-			for _, renameFunc in pairs(self.RenameList) do
-				renameFunc(newName)
-			end
-		end
-		function var:Reference()
-			self.UseCount = self.UseCount + 1
-		end
+
+		var.Rename = methodList.Scoping.Rename
+		var.Reference = methodList.Scoping.Reference
 		table.insert(globalVars, var)
 		return var
 	end
