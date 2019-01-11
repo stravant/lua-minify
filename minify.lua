@@ -1378,6 +1378,7 @@ local function AddVariableInfo(ast)
 		table.insert(currentScope.VariableList, var)
 		return var
 	end
+
 	local function getGlobalVar(name)
 		for _, var in pairs(globalVars) do
 			if var.Name == name then
@@ -1401,12 +1402,14 @@ local function AddVariableInfo(ast)
 		table.insert(globalVars, var)
 		return var
 	end
+
 	local function addGlobalReference(name, setNameFunc)
 		assert(name, "Missing var name")
 		local var = getGlobalVar(name)
 		table.insert(var.RenameList, setNameFunc)
 		return var
 	end
+
 	local function getLocalVar(scope, name)
 		-- First search this scope
 		-- Note: Reverse iterate here because Lua does allow shadowing a local
@@ -1614,7 +1617,6 @@ end
 
 -- Prints out an AST to a string
 local function PrintAst(ast)
-
 	local printStat, printExpr;
 
 	local function printt(tk)
