@@ -1210,7 +1210,7 @@ local function VisitAst(ast, visitors)
 				eType == 'VargLiteral' or eType == 'VariableExpr' -- single node or no children
 
 			if not ok then
-				error("unreachable, type: "..eType..":"..FormatTable(expr), 0)
+				assert(false, "unreachable, type: "..eType..":"..FormatTable(expr))
 			end
 		end
 		postVisit(expr)
@@ -1279,7 +1279,7 @@ local function VisitAst(ast, visitors)
 			local ok = stat.Type == 'BreakStat'
 
 			if not ok then
-				error("unreachable", 0)
+				assert(false, "unreachable")
 			end
 		end
 		postVisit(stat)
@@ -2038,7 +2038,7 @@ local function FormatAst(ast)
 				eType == 'VargLiteral' or eType == 'VariableExpr'
 
 			if not ok then
-				error("unreachable, type: "..eType..":"..FormatTable(expr), 0)
+				assert(false, "unreachable, type: "..eType..":"..FormatTable(expr))
 			end
 		end
 	end
@@ -2605,9 +2605,359 @@ local function StripAst(ast)
 	stripStat(ast)
 end
 
+local function FoldConstants(ast)
+	local foldStat, foldExpr
+	local arithFolds, unopFolds
+	local countList
+
+	local function isReal(n)
+		return (n == n) and tonumber(tostring(n)) or nil
+	end
+
+	local function isNumeric(what)
+		return what.Type == 'Number'
+			or (what.Type == 'String' and tonumber(what.Source))
+	end
+
+	local function isInvalidList(list)
+		return list.Type == 'TableLiteral' and not countList(list)
+	end
+
+	local function isNotLiteral(tt)
+		return not string.find(tt, 'Literal', 1, true)
+	end
+
+	local function replaceExpr(expr, name, tt, value)
+		local methods = methodList[name]
+		local leading = expr:GetFirstToken().LeadingWhite
+
+		for i in pairs(expr) do
+			expr[i] = nil
+		end
+
+		expr.Type = name
+		expr.Token = {
+			Type = tt,
+			Source = tostring(value),
+			LeadingWhite = leading
+		}
+
+		expr.GetFirstToken = methods.GetFirstToken
+		expr.GetLastToken = methods.GetLastToken
+	end
+
+	function countList(expr)
+		local value
+		local ok = true
+		local last = 1
+		local list = {}
+
+		for _, entry in pairs(expr.EntryList) do
+			local idx
+
+			if isNotLiteral(entry.Value.Type) or isInvalidList(entry.Value) then
+				ok = false
+				break
+			end
+
+			if entry.EntryType == 'Index' then
+				local idxt = entry.Index.Type
+
+				if idxt == 'NumberLiteral' then
+					local flt = tonumber(entry.Index.Token.Source)
+
+					if flt % 1 == 0 then
+						idx = flt
+					end
+				elseif isNotLiteral(idxt) or isInvalidList(entry.Value) or idxt == 'NilLiteral' or idxt == 'VargLiteral' then
+					ok = false
+					break
+				end
+			elseif entry.EntryType == 'Value' then
+				idx = last
+				last = last + 1
+			elseif entry.EntryType == 'Field' then
+				idx = nil
+			else
+				assert(false, "unreachable")
+			end
+
+			if idx then
+				list[idx] = entry.Value.Type
+			end
+		end
+
+		if ok then
+			local size = #list
+
+			if size > 0 then
+				if list[size] == 'VargLiteral' then
+					ok = false
+				elseif list[size] == 'NilLiteral' then
+					for i = 1, size do
+						if list[i] == 'NilLiteral' then -- as per Lua manual
+							size = i - 1
+							break
+						end
+					end
+				end
+			end
+
+			if ok then
+				value = size
+			end
+		end
+
+		return value
+	end
+
+	arithFolds = {
+		['+'] = function(left, right)
+			return left.Source + right.Source
+		end;
+		['-'] = function(left, right)
+			return left.Source - right.Source
+		end;
+		['*'] = function(left, right)
+			return left.Source * right.Source
+		end;
+		['/'] = function(left, right)
+			return isReal(left.Source / right.Source)
+		end;
+		['%'] = function(left, right)
+			return isReal(left.Source % right.Source)
+		end;
+		['^'] = function(left, right)
+			return isReal(left.Source ^ right.Source)
+		end;
+	}
+
+	unopFolds = {
+		['-'] = function(right)
+			local name, value
+
+			if isNumeric(right) then
+				name = 'NumberLiteral'
+				value = -right.Source
+			end
+
+			return name, 'Number', value
+		end;
+		['not'] = function(right)
+			local name = 'BooleanLiteral'
+			local value
+
+			if right.Type == 'Number' then
+				value = false
+			elseif right.Type == 'String' then
+				value = false
+			elseif right.Type == 'Nil' then
+				value = true
+			elseif right.Type == 'Keyword' then
+				value = right.Source == 'true'
+			else
+				name = nil
+			end
+
+			return name, 'Keyword', value
+		end;
+		['#'] = function(right)
+			local name, value
+
+			if right.Type == 'String' then -- don't need to call `string.char`, a `.` will do, we preverify
+				local escaped = right.Source:gsub('\\%d%d?%d?', '.'):gsub('\\.', '.')
+				local pad
+
+				if right.Source:sub(1, 1) ~= '[' then
+					pad = 1
+				else
+					local _, finish = string.find(right.Source, '^%[=-%[')
+					pad = finish
+				end
+
+				value = #escaped - pad * 2
+				name = 'NumberLiteral'
+			end
+
+			return name, 'Number', value
+		end
+	}
+
+	function foldExpr(expr)
+		if expr.Type == 'BinopExpr' then
+			local Op = expr.Token_Op.Source
+			local Lhs = expr.Lhs
+			local Rhs = expr.Rhs
+			local name, tt, value
+
+			foldExpr(expr.Lhs)
+			foldExpr(expr.Rhs)
+
+			if arithFolds[Op] and Lhs.Token and Rhs.Token then
+				if isNumeric(Lhs.Token) and isNumeric(Rhs.Token) then
+					value = arithFolds[Op](Lhs.Token, Rhs.Token)
+
+					if value then
+						name = 'NumberLiteral'
+						tt = 'Number'
+					end
+				end
+			end
+
+			if name then
+				replaceExpr(expr, name, tt, value)
+			end
+		elseif expr.Type == 'UnopExpr' then
+			local Rhs = expr.Rhs
+
+			foldExpr(Rhs)
+
+			if Rhs.Token then
+				local handler = assert(unopFolds[expr.Token_Op.Source],
+					'no proper unary handler for `' .. expr.Token_Op.Source .. '`')
+
+				local name, tt, value = handler(Rhs.Token)
+
+				if name then
+					replaceExpr(expr, name, tt, value)
+				end
+			elseif expr.Token_Op.Source == '#' and Rhs.Type == 'TableLiteral' then
+				local value = countList(Rhs)
+
+				if value then
+					replaceExpr(expr, 'NumberLiteral', 'Number', value)
+				end
+			end
+		elseif expr.Type == 'NumberLiteral' or expr.Type == 'StringLiteral' or
+			expr.Type == 'NilLiteral' or expr.Type == 'BooleanLiteral' or
+			expr.Type == 'VargLiteral'
+		then
+			-- Do not interact
+			return
+		elseif expr.Type == 'FieldExpr' then
+			foldExpr(expr.Base)
+		elseif expr.Type == 'IndexExpr' then
+			foldExpr(expr.Base)
+			foldExpr(expr.Index)
+		elseif expr.Type == 'MethodExpr' or expr.Type == 'CallExpr' then
+			foldExpr(expr.Base)
+			--if expr.FunctionArguments.CallType == 'StringCall' then
+			--else
+			if expr.FunctionArguments.CallType == 'ArgCall' then
+				for i = 1, #expr.FunctionArguments.ArgList do
+					foldExpr(expr.FunctionArguments.ArgList[i])
+				end
+			elseif expr.FunctionArguments.CallType == 'TableCall' then
+				foldExpr(expr.FunctionArguments.TableExpr)
+			end
+		elseif expr.Type == 'FunctionLiteral' then
+			foldStat(expr.Body)
+		elseif expr.Type == 'VariableExpr' then -- nothing?
+			return
+			-- stript(expr.Token)
+		elseif expr.Type == 'ParenExpr' then
+			foldExpr(expr.Expression)
+
+			if expr.Expression.Token then
+				local exp = expr.Expression
+
+				for i in pairs(expr) do
+					expr[i] = nil
+				end
+
+				for i, v in pairs(exp) do
+					expr[i] = v
+				end
+			end
+		elseif expr.Type == 'TableLiteral' then
+			for _, entry in pairs(expr.EntryList) do
+				if entry.EntryType == 'Field' then
+					foldExpr(entry.Value)
+				elseif entry.EntryType == 'Index' then
+					foldExpr(entry.Index)
+					foldExpr(entry.Value)
+				elseif entry.EntryType == 'Value' then
+					foldExpr(entry.Value)
+				else
+					assert(false, "unreachable")
+				end
+			end
+		else
+			assert(false, "unreachable, type: "..expr.Type..":"..FormatTable(expr))
+		end
+	end
+
+	function foldStat(stat)
+		if stat.Type == 'StatList' then
+			for i = 1, #stat.StatementList do
+				foldStat(stat.StatementList[i])
+			end
+		elseif stat.Type == 'BreakStat' then
+			return -- nothing
+		elseif stat.Type == 'ReturnStat' then
+			for i = 1, #stat.ExprList do
+				foldExpr(stat.ExprList[i])
+			end
+		elseif stat.Type == 'LocalVarStat' then
+			if stat.Token_Equals then
+				for i = 1, #stat.ExprList do
+					foldExpr(stat.ExprList[i])
+				end
+			end
+		elseif stat.Type == 'LocalFunctionStat' then
+			foldStat(stat.FunctionStat.Body)
+		elseif stat.Type == 'FunctionStat' then
+			foldStat(stat.Body)
+		elseif stat.Type == 'RepeatStat' then
+			foldStat(stat.Body)
+			foldExpr(stat.Condition)
+		elseif stat.Type == 'GenericForStat' then
+			for i = 1, #stat.GeneratorList do
+				foldExpr(stat.GeneratorList[i])
+			end
+			foldStat(stat.Body)
+		elseif stat.Type == 'NumericForStat' then
+			--for i = 1, #stat.VarList do
+			--	foldStat(stat.VarList[i])
+			--end
+			for i = 1, #stat.RangeList do
+				foldExpr(stat.RangeList[i])
+			end
+			foldStat(stat.Body)
+		elseif stat.Type == 'WhileStat' then
+			foldExpr(stat.Condition)
+			foldStat(stat.Body)
+		elseif stat.Type == 'DoStat' then
+			foldStat(stat.Body)
+		elseif stat.Type == 'IfStat' then
+			foldExpr(stat.Condition)
+			foldStat(stat.Body)
+
+			for _, clause in pairs(stat.ElseClauseList) do
+				if clause.Condition then
+					foldExpr(clause.Condition)
+				end
+
+				foldStat(clause.Body)
+			end
+		elseif stat.Type == 'CallExprStat' then
+			foldExpr(stat.Expression)
+		elseif stat.Type == 'AssignmentStat' then
+			for i = 1, #stat.Rhs do
+				foldExpr(stat.Rhs[i])
+			end
+		else
+			assert(false, "unreachable")
+		end
+	end
+
+	foldStat(ast)
+end
+
 return {
 	CreateLuaParser = CreateLuaParser,
 	AddVariableInfo = AddVariableInfo,
+	FoldConstants = FoldConstants,
 	StripAst = StripAst,
 	FormatAst = FormatAst,
 	PrintAst = PrintAst

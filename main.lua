@@ -1,4 +1,13 @@
-local VarDigits, VarStartDigits, Keywords, ExtGlobals, CreateLuaParser, AddVariableInfo, StripAst, FormatAst, PrintAst
+local VarDigits,
+	VarStartDigits,
+	Keywords,
+	ExtGlobals,
+	CreateLuaParser,
+	AddVariableInfo,
+	FoldConstants,
+	StripAst,
+	FormatAst,
+	PrintAst
 
 do
 	local lookData = require('lookups')
@@ -10,6 +19,7 @@ do
 	ExtGlobals = lookData.GlobalRenameIgnore
 	CreateLuaParser = minify.CreateLuaParser
 	AddVariableInfo = minify.AddVariableInfo
+	FoldConstants = minify.FoldConstants
 	StripAst = minify.StripAst
 	FormatAst = minify.FormatAst
 	PrintAst = minify.PrintAst
@@ -331,6 +341,7 @@ do -- prepare program
 		{'help', 'Show the help message and exit'},
 		{'minify', 'Trim extra whitespace'},
 		{'beautify', 'Format the code'},
+		{'fold', 'Fold arithmetic and unary operations'},
 		{'small', 'Minify the variable names'},
 		{'smaller', 'Minify the variable names based on scoping'},
 		{'pretty', 'Beautify the variable names'}
@@ -395,6 +406,10 @@ end
 do -- run program
 	local ast = CreateLuaParser(source)
 	local global_scope, root_scope = AddVariableInfo(ast)
+
+	if flags.fold then
+		FoldConstants(ast)
+	end
 
 	if flags.small then
 		MinifyVariables(global_scope, root_scope)

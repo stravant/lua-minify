@@ -1,9 +1,0 @@
-test()
-test_2(1,2,3)
-test_3('abc')
-test_4({},'abc',{})
-test_5{}
-test_6{t{},t{}}
-test_7""
-test_8""""
-test_9{}""{}
