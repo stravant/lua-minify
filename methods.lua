@@ -93,15 +93,11 @@ assign(methods.VariableExpr, 'Token', 'Token')
 assign(methods.WhileStat, 'Token_While', 'Token_End')
 
 function methods.node:GetFirstToken()
-	local t = self:VirtualGetFirstToken()
-	assert(t)
-	return t
+	return assert(self:VirtualGetFirstToken(), 'no first token')
 end
 
 function methods.node:GetLastToken()
-	local t = self:VirtualGetLastToken()
-	assert(t)
-	return t
+	return assert(self:VirtualGetLastToken(), 'no last token')
 end
 
 function methods.TableCall:GetFirstToken()
