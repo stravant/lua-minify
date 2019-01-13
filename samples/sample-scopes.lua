@@ -4,14 +4,20 @@ local c
 
 A = 1
 B = 2
-C = 3
-D = 4
 
-G_4_()
-G_1_()
+local func_1
+local func_2
 
 do
-	a = 1
+	do
+		local func_3
+	end
+
+	function func_3()
+	end
+
+	function func_2()
+	end
 
 	do
 		local a, b = 2, 3
@@ -22,13 +28,11 @@ do
 	do
 		d, c = 0, 1
 
-		local b, d = 2, 3
+		local b, d = 2, a
 
 		print(b, d)
 	end
+end
 
-	d = 0
-	b = 0
-
-	print(a)
+function func_1()
 end

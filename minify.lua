@@ -1531,20 +1531,13 @@ local function AddVariableInfo(ast)
 			-- A function stat may also assign to a global variable if it is in
 			-- the form `function foo()` with no additional dots/colons in the
 			-- name chain.
-			local nameChain = stat.NameChain
-			local var;
-			if #nameChain == 1 then
-				-- If there is only one item in the name chain, then the first item
-				-- is a reference to a global variable.
-				var = addGlobalReference(nameChain[1].Source, function(name)
-					nameChain[1].Source = name
-				end)
-			else
-				var = referenceVariable(nameChain[1].Source, function(name)
-					nameChain[1].Source = name
-				end)
-			end
+			local nameChain = stat.NameChain -- variable could be a local already
+			local var = referenceVariable(nameChain[1].Source, function(name)
+				nameChain[1].Source = name
+			end)
+
 			var.AssignedTo = true
+
 			pushScope()
 			renameFuncParams(stat.ArgList)
 		end;
