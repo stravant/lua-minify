@@ -1545,6 +1545,20 @@ local function AddVariableInfo(ast)
 			popScope()
 		end;
 	}
+	visitor.RepeatStat = {
+		Pre = function(stat)
+			-- Repeat statements needs a custom scope for its condition
+			-- Avoid calling the visitor for StatList because it
+			-- creates a new scope that leaves out the condition
+			pushScope()
+			for _, ch in pairs(stat.Body.StatementList) do
+				VisitAst(ch, visitor)
+			end
+			VisitAst(stat.Condition, visitor)
+			popScope()
+			return true
+		end
+	}
 	visitor.GenericForStat = {
 		Pre = function(stat)
 			-- Generic fors need an extra scope holding the range variables

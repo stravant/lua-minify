@@ -9,9 +9,9 @@ local func_1
 local func_2
 
 do
-	do
+	repeat
 		local func_3
-	end
+	until func_3
 
 	function func_3()
 	end
