@@ -2952,6 +2952,9 @@ local function FoldConstants(ast)
 		elseif stat.Type == 'CallExprStat' then
 			foldExpr(stat.Expression)
 		elseif stat.Type == 'AssignmentStat' then
+			for i = 1, #stat.Lhs do
+				foldExpr(stat.Lhs[i])
+			end
 			for i = 1, #stat.Rhs do
 				foldExpr(stat.Rhs[i])
 			end
