@@ -2636,6 +2636,14 @@ local function FoldConstants(ast)
 		return not string.find(tt, 'Literal', 1, true)
 	end
 
+	local function getParenValue(expr)
+		if expr.Type == 'ParenExpr' then
+			return getParenValue(expr.Expression)
+		else
+			return expr
+		end
+	end
+
 	local function replaceExpr(expr, name, tt, value)
 		local methods = methodList[name]
 		local leading = expr:GetFirstToken().LeadingWhite
@@ -2795,12 +2803,12 @@ local function FoldConstants(ast)
 	function foldExpr(expr)
 		if expr.Type == 'BinopExpr' then
 			local Op = expr.Token_Op.Source
-			local Lhs = expr.Lhs
-			local Rhs = expr.Rhs
+			local Lhs = getParenValue(expr.Lhs)
+			local Rhs = getParenValue(expr.Rhs)
 			local name, tt, value
 
-			foldExpr(expr.Lhs)
-			foldExpr(expr.Rhs)
+			foldExpr(Lhs)
+			foldExpr(Rhs)
 
 			if arithFolds[Op] and Lhs.Token and Rhs.Token then
 				if isNumeric(Lhs.Token) and isNumeric(Rhs.Token) then
@@ -2817,7 +2825,7 @@ local function FoldConstants(ast)
 				replaceExpr(expr, name, tt, value)
 			end
 		elseif expr.Type == 'UnopExpr' then
-			local Rhs = expr.Rhs
+			local Rhs = getParenValue(expr.Rhs)
 
 			foldExpr(Rhs)
 
@@ -2863,11 +2871,10 @@ local function FoldConstants(ast)
 			foldStat(expr.Body)
 		elseif expr.Type == 'VariableExpr' then -- nothing?
 			return
-			-- stript(expr.Token)
 		elseif expr.Type == 'ParenExpr' then
 			foldExpr(expr.Expression)
 
-			if expr.Expression.Token then
+			if expr.Expression.Type == 'ParenExpr' then
 				local exp = expr.Expression
 
 				for i in pairs(expr) do
