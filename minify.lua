@@ -1358,7 +1358,7 @@ local function AddVariableInfo(ast)
 
 	-- Add / reference variables
 	local function addLocalVar(name, setNameFunc, localInfo)
-		assert(localInfo, "Misisng localInfo")
+		assert(localInfo, "Missing localInfo")
 		assert(name, "Missing local var name")
 		local var = {
 			Type = 'Local';
