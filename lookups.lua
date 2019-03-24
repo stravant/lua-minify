@@ -36,9 +36,21 @@ end
 
 -- Define the data tables
 data.WhiteChars = lookupify {' ', '\n', '\t', '\r'}
+
 --[[
-data.EscapeForCharacter = {['\r'] = '\\r', ['\n'] = '\\n', ['\t'] = '\\t', ['"'] = '\\"', ["'"] = "\\'", ['\\'] = '\\'}
-]]
+data.CharacterForEscape =
+	setmetatable(
+	{},
+	{
+		__index = function(self, what)
+			self[what] = what
+			return what
+		end,
+		__metatable = 'Escapes'
+	}
+)
+--[==[
+--]]
 data.CharacterForEscape = {
 	['"'] = '"',
 	['\\'] = '\\',
@@ -49,8 +61,10 @@ data.CharacterForEscape = {
 	['r'] = '\r',
 	['t'] = '\t',
 	['v'] = '\v',
+	['z'] = '\z',
 	["'"] = "'"
 }
+--]==]
 
 data.AllIdentChars = lookupify(merge(range('a', 'z'), range('A', 'Z'), range('0', '9'), {'_'}))
 
