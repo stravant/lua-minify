@@ -113,6 +113,8 @@ local Symbols = lookupify{'+', '-', '*', '/', '^', '%', ',', '{', '}', '[', ']',
 
 local EqualSymbols = lookupify{'~', '=', '>', '<'}
 
+local BitwiseSymbols = lookupify{'>', '<'}
+
 local Keywords = lookupify{
     'and', 'break', 'do', 'else', 'elseif',
     'end', 'false', 'for', 'function', 'goto', 'if',
@@ -122,13 +124,13 @@ local Keywords = lookupify{
 
 local BlockFollowKeyword = lookupify{'else', 'elseif', 'until', 'end'}
 
-local UnopSet = lookupify{'-', 'not', '#'}
+local UnopSet = lookupify{'-', 'not', '#', '~'}
 
 local BinopSet = lookupify{
-	'+', '-', '*', '/', '%', '^', '#',
+	'+', '-', '*', '/', '//', '%', '^', '#',
 	'..', '.', ':',
 	'>', '<', '<=', '>=', '~=', '==',
-	'and', 'or'
+	'and', 'or', '>>', '<<', '&', '~', '|'
 }
 
 local GlobalRenameIgnore = lookupify{
@@ -136,13 +138,19 @@ local GlobalRenameIgnore = lookupify{
 }
 
 local BinaryPriority = {
-   ['+'] = {6, 6};
-   ['-'] = {6, 6};
-   ['*'] = {7, 7};
-   ['/'] = {7, 7};
-   ['%'] = {7, 7};
-   ['^'] = {10, 9};
-   ['..'] = {5, 4};
+   ['+'] = {9, 9};
+   ['-'] = {9, 9};
+   ['*'] = {10, 10};
+   ['/'] = {10, 10};
+   ['//'] = {10, 10};
+   ['%'] = {10, 10};
+   ['^'] = {12, 11};
+   ['..'] = {8, 7};
+   ['>>'] = {7, 7};
+   ['<<'] = {7, 7};
+   ['&'] = {6, 6};
+   ['~'] = {5, 5};
+   ['|'] = {4, 4};
    ['=='] = {3, 3};
    ['~='] = {3, 3};
    ['>'] = {3, 3};
@@ -152,7 +160,7 @@ local BinaryPriority = {
    ['and'] = {2, 2};
    ['or'] = {1, 1};
 };
-local UnaryPriority = 8
+local UnaryPriority = 11
 
 -- Eof, Ident, Keyword, Number, String, Symbol
 
@@ -398,9 +406,14 @@ function CreateLuaTokenStream(text)
 		elseif EqualSymbols[c1] then
 			if look() == '=' then
 				p = p + 1
+			elseif look() == c1 and BitwiseSymbols[c1] then
+				p = p + 1
 			end
 			token('Symbol')
 		elseif Symbols[c1] then
+			if c1 == '/' and look() == '/' then
+				p = p + 1
+			end
 			token('Symbol')
 		else
 			error("Bad symbol `"..c1.."` in source.")
